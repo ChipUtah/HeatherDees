@@ -18,13 +18,16 @@ export default async function handler(req, res) {
       mode: "setup",                         // save card only
       success_url: process.env.SUCCESS_URL + "?ok=1",
       cancel_url: process.env.CANCEL_URL + "?canceled=1",
-      client_reference_id: planCode,         // backup
-      metadata: { plan: planCode },          // <-- IMPORTANT
+      client_reference_id: planCode,
+      metadata: { plan: planCode },
+
+      // 🔑 Make Checkout create a Customer so the webhook has session.customer
+      customer_creation: { enabled: true },  // <-- add this
       payment_method_types: ["card"],
     });
 
     res.setHeader("Location", session.url);
-    return res.status(303).end();            // redirect to Stripe Checkout
+    return res.status(303).end();
   } catch (e) {
     console.error(e);
     res.status(500).send("Unable to start checkout");
