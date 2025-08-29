@@ -26,71 +26,17 @@ export default async function handler(req, res) {
       process.env.STRIPE_WEBHOOK_SECRET
     );
   } catch (err) {
-    console.error("Webhook signature verification failed:", err.message);
+    console.error("❌ Webhook signature failed:", err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  // ✅ Handle checkout completion
+  console.log("✅ Webhook event received:", event.type);
+
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
+    console.log("Checkout Session:", session);
 
-    // Pick which plan
-    let schedule;
-    if (session.metadata?.plan === "6-inperson") {
-      schedule = await stripe.subscriptionSchedules.create({
-        customer: session.customer,
-        start_date: "now",
-        end_behavior: "cancel",
-        phases: [
-          {
-            items: [{ price: process.env.PRICE_ID_500, quantity: 1 }],
-            iterations: 1,
-          },
-          {
-            items: [{ price: process.env.PRICE_ID_400, quantity: 1 }],
-            iterations: 5,
-          },
-        ],
-      });
-    }
-
-    if (session.metadata?.plan === "3-inperson") {
-      schedule = await stripe.subscriptionSchedules.create({
-        customer: session.customer,
-        start_date: "now",
-        end_behavior: "cancel",
-        phases: [
-          {
-            items: [{ price: process.env.PRICE_ID_500, quantity: 1 }],
-            iterations: 1,
-          },
-          {
-            items: [{ price: process.env.PRICE_ID_400, quantity: 1 }],
-            iterations: 2,
-          },
-        ],
-      });
-    }
-
-    if (session.metadata?.plan === "6-online") {
-      schedule = await stripe.subscriptionSchedules.create({
-        customer: session.customer,
-        start_date: "now",
-        end_behavior: "cancel",
-        phases: [
-          {
-            items: [{ price: process.env.PRICE_ID_300, quantity: 1 }],
-            iterations: 1,
-          },
-          {
-            items: [{ price: process.env.PRICE_ID_200, quantity: 1 }],
-            iterations: 5,
-          },
-        ],
-      });
-    }
-
-    console.log("✅ Subscription Schedule Created:", schedule.id);
+    // For now, don’t create schedules, just confirm it’s firing
   }
 
   res.json({ received: true });
