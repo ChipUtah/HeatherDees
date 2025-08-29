@@ -7,23 +7,22 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   apiVersion: "2022-11-15",
 });
 
-// Build phases per plan
 function phasesFor(plan) {
   switch (plan) {
     case "6-inperson":
       return [
-        { price: process.env.PRICE_ID_500, iterations: 1 }, // $500 x1
-        { price: process.env.PRICE_ID_400, iterations: 5 }, // $400 x5
+        { price: process.env.PRICE_ID_500, iterations: 1 },
+        { price: process.env.PRICE_ID_400, iterations: 5 },
       ];
     case "3-inperson":
       return [
-        { price: process.env.PRICE_ID_500, iterations: 1 }, // $500 x1
-        { price: process.env.PRICE_ID_400, iterations: 2 }, // $400 x2
+        { price: process.env.PRICE_ID_500, iterations: 1 },
+        { price: process.env.PRICE_ID_400, iterations: 2 },
       ];
     case "6-online":
       return [
-        { price: process.env.PRICE_ID_300, iterations: 1 }, // $300 x1
-        { price: process.env.PRICE_ID_200, iterations: 5 }, // $200 x5
+        { price: process.env.PRICE_ID_300, iterations: 1 },
+        { price: process.env.PRICE_ID_200, iterations: 5 },
       ];
     default:
       return null;
@@ -40,7 +39,11 @@ export default async function handler(req, res) {
   try {
     const raw = await getRawBody(req);
     const sig = req.headers["stripe-signature"];
-    event = stripe.webhooks.constructEvent(raw, sig, process.env.STRIPE_WEBHOOK_SECRET);
+    event = stripe.webhooks.constructEvent(
+      raw,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET
+    );
   } catch (err) {
     console.error("❌ Webhook signature failed:", err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
@@ -49,32 +52,19 @@ export default async function handler(req, res) {
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
 
-    // identify plan robustly
-    const plan =
-      session.client_reference_id ||
-      (session.metadata && session.metadata.plan);
-
-    if (!plan) {
-      console.warn("⚠️ No plan on session; nothing to schedule.");
-      return res.json({ received: true });
-    }
-
+    const plan = session.client_reference_id || session.metadata?.plan;
     const defs = phasesFor(plan);
     if (!defs) {
-      console.warn("⚠️ Unknown plan:", plan);
+      console.warn("⚠️ Unknown or missing plan:", plan);
       return res.json({ received: true });
     }
 
     try {
-      // get saved payment method from SetupIntent
-      const setupIntentId = session.setup_intent;
-      const setupIntent = setupIntentId
-        ? await stripe.setupIntents.retrieve(setupIntentId)
-        : null;
-      const defaultPm = setupIntent?.payment_method || null;
+      const siId = session.setup_intent;
+      const si = siId ? await stripe.setupIntents.retrieve(siId) : null;
+      const defaultPm = si?.payment_method || null;
 
       const phases = defs.map(d => ({
-        // API 2022-11-15 expects `items` (not `plans`)
         items: [{ price: d.price, quantity: 1 }],
         iterations: d.iterations,
       }));
@@ -90,13 +80,17 @@ export default async function handler(req, res) {
         phases,
       });
 
-      console.log("✅ Created schedule", schedule?.id, "for plan", plan);
+      console.log("✅ Created schedule:", schedule.id, "plan:", plan);
     } catch (err) {
-      console.error("❌ Failed to create schedule:", err);
-      return res.status(500).send("Server error while creating schedule");
+      console.error("❌ Schedule create failed:", err);
+      // DEBUG: return the exact Stripe error text so we see what's wrong
+      return res
+        .status(500)
+        .send(
+          `schedule_create_error: ${err.type || "Error"} - ${err.message || err}`
+        );
     }
   }
 
   return res.json({ received: true });
 }
-
