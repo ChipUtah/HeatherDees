@@ -1,11 +1,10 @@
 import Stripe from "stripe";
-
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 const ALLOWED_PLANS = {
   "6-inperson": "6 Month In Person",
   "3-inperson": "3 Month In Person",
-  "6-online": "Online Body Transformation"
+  "6-online": "Online Body Transformation",
 };
 
 export default async function handler(req, res) {
@@ -16,15 +15,16 @@ export default async function handler(req, res) {
 
   try {
     const session = await stripe.checkout.sessions.create({
-      mode: "setup",
+      mode: "setup",                         // save card only
       success_url: process.env.SUCCESS_URL + "?ok=1",
       cancel_url: process.env.CANCEL_URL + "?canceled=1",
-      client_reference_id: planCode,
-      payment_method_types: ["card"]
+      client_reference_id: planCode,         // backup
+      metadata: { plan: planCode },          // <-- IMPORTANT
+      payment_method_types: ["card"],
     });
 
     res.setHeader("Location", session.url);
-    return res.status(303).end();
+    return res.status(303).end();            // redirect to Stripe Checkout
   } catch (e) {
     console.error(e);
     res.status(500).send("Unable to start checkout");
